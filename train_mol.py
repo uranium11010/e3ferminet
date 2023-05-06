@@ -16,7 +16,7 @@ import plotly.express as px
 
 import e3nn_jax as e3nn  # import e3nn-jax
 
-from e3ferminet import Ansatz
+from e3ferminet_mol import Ansatz
 
 jnp.set_printoptions(precision=4, suppress=True)
 
@@ -27,31 +27,28 @@ print(e3nn.__version__)
 print(jnp.ones(()).device())
 
 
-class E3FerminetAtom:
+class E3FerminetMol:
     def __init__(self, config):
         self.use_wandb = config.get("use_wandb", False)
 
-        self.Z = config.get("Z", 1)
+        self.Zs = config["Zs"]  # length M
+        self.nuclei_coords = jnp.array(config["nuclei_coords"])  # (M, 3)
         self.N_up = config.get("N_up", 1)
         self.N_down = config.get("N_down", 1)
         self.sampler = config.get("sampler")  # use M-H if None
         self.sampling_dist = config.get("sampling_dist")  # use M-H if None
         assert((self.sampler is None) == (self.sampling_dist is None))
         self.N_samples = config.get("batch_size", 20000)
+        self.test_N_samples = config.get("batch_size", 50000)
         self.num_batches = config.get("num_batches", 1000)
         self.lr = config.get("lr", 0.1)
         if isinstance(self.lr, dict):
             self.lr = optax.warmup_cosine_decay_schedule(**self.lr)
         self.validate_every = config.get("validate_every", 2000)
-        self.moving_avg_coeff = config.get("moving_avg_coeff", 0.1)
-        self.regularize = "regularize" in config
-        self.regularize_pow = config["regularize"].get("pow", 8) if self.regularize else None
-        self.regularize_coeff = config["regularize"].get("coeff", 100) if self.regularize else None
-        self.regularize_max_r = config["regularize"].get("max_r", 2) if self.regularize else None
         self.patience = config.get("patience", 200)
         self.random_key = jax.random.PRNGKey(config.get("random_seed", 0))
 
-        self.ansatz = Ansatz(self.Z, self.N_up, self.N_down, config["ansatz"])
+        self.ansatz = Ansatz(self.nuclei_coords, self.N_up, self.N_down, config["ansatz"])
 
         self.w = None
         self.w_list = None
@@ -66,8 +63,10 @@ class E3FerminetAtom:
 
         @jit
         def local_potential_energy(w, coords):  # coords must be unbatched
+            expanded_coords = coords.reshape((-1, 1, 3))
+            rel_positions = expanded_coords - self.nuclei_coords  # (N, M, 3)
+            V_e_p = -jnp.sum(jnp.array(self.Zs) / jnp.linalg.norm(rel_positions, axis=2))
             coords = coords.reshape((-1, 3))
-            V_e_p = -self.Z * jnp.sum(1.0 / jnp.linalg.norm(coords, axis=1), axis=0)
             relative_dists = jnp.linalg.norm(jnp.expand_dims(coords, axis=0) - jnp.expand_dims(coords, axis=1), axis=2)
             V_e_e = jnp.sum(1.0 / jnp.where(relative_dists == 0.0, np.inf, relative_dists)) / 2
             return V_e_p + V_e_e
@@ -89,32 +88,40 @@ class E3FerminetAtom:
             return jnp.dot(scaled_probs, local_energies) / jnp.sum(scaled_probs)
         self._energy = energy
 
-        if self.regularize:
-            @jit
-            def regularized_energy(w, coords_batch):
-                reshaped_coords_batch = coords_batch.reshape((coords_batch.shape[0], -1, 3))
-                penalty = jnp.sum((jnp.linalg.norm(reshaped_coords_batch, axis=2) / self.regularize_max_r) ** self.regularize_pow, axis=1)
-                if self.sampling_dist is None:
-                    cum_penalty = jnp.mean(penalty)
-                else:
-                    psi = self.ansatz.wavefunction(w, coords_batch)
-                    scaled_probs = psi ** 2 / vmap(self.sampling_dist)(coords_batch)
-                    cum_penalty = jnp.dot(scaled_probs, penalty) / jnp.sum(scaled_probs)
-                return energy(w, coords_batch) + self.regularize_coeff * cum_penalty
-            self._regularized_energy = regularized_energy
-        
         if self.sampler is None:
             self.MH_stdev = config["MH"].get("stdev", 0.2)
             self.MH_warmup = config["MH"].get("warmup", 500)
             self.MH_interval = config["MH"].get("interval", 10)
             self.MH_batch_size = config["MH"].get("batch_size", 64)
             self.sampled_coords = None
-            def sampler(random_key, Z, num_samples):
+            def sampler(random_key, num_samples: int, N, Zs: list[int], nuclei_coords):
                 # returns jnp array of shape (num_samples, 3*Z) sampled from the wavefunction
                 if self.sampled_coords is None:
                     warmup = self.MH_warmup
                     random_key, subkey = jax.random.split(random_key)
-                    self.sampled_coords = self.MH_stdev * jax.random.normal(subkey, (self.MH_batch_size, 3*Z))
+                    # assign electrons to atoms
+                    num_electrons = [0 for _ in range(len(Zs))]
+                    electrons_left = N
+                    while electrons_left > 0:
+                        new_electrons_left = electrons_left
+                        for i in range(len(Zs)):
+                            if num_electrons[i] < Zs[i]:
+                                num_electrons[i] += 1
+                                new_electrons_left -= 1
+                                if new_electrons_left == 0:
+                                    break
+                        if electrons_left == new_electrons_left:
+                            break
+                        electrons_left = new_electrons_left
+                    if electrons_left > 0:
+                        while electrons_left > 0:
+                            for i in range(len(Zs)):
+                                num_electrons[i] += 1
+                                electrons_left -= 1
+                                if electrons_left == 0:
+                                    break
+                    coords_centers = jnp.concatenate([nuclei_coords[i] for i in range(len(Zs)) for _ in range(num_electrons[i])])
+                    self.sampled_coords = self.MH_stdev * jax.random.normal(subkey, (self.MH_batch_size, 3*N)) + coords_centers
                 else:
                     warmup = self.MH_interval
                 coords = []
@@ -122,7 +129,7 @@ class E3FerminetAtom:
                 num_coords_remaining = num_samples
                 for i in range(num_iters):
                     random_key, subkey = jax.random.split(random_key)
-                    proposal_coords = self.sampled_coords + self.MH_stdev * jax.random.normal(subkey, (self.MH_batch_size, 3*Z))
+                    proposal_coords = self.sampled_coords + self.MH_stdev * jax.random.normal(subkey, (self.MH_batch_size, 3*N))
                     acceptance_ratios = (self.ansatz.wavefunction(self.w, proposal_coords) / self.ansatz.wavefunction(self.w, self.sampled_coords)) ** 2
                     random_key, subkey = jax.random.split(random_key)
                     self.sampled_coords = jnp.where(np.expand_dims(jax.random.uniform(subkey, (self.MH_batch_size,)) < acceptance_ratios, axis=1),
@@ -161,21 +168,21 @@ class E3FerminetAtom:
 
         self.init_weights()
 
-        grad_energy = jit(grad(self._regularized_energy)) if self.regularize else jit(grad(self._energy))
+        grad_energy = jit(grad(self._energy))
 
         optimizer = optax.adamw(learning_rate=self.lr)
         opt_state = optimizer.init(self.w)
 
         weights = [self.w]
         self.random_key, subkey = jax.random.split(self.random_key)
-        coords_batch = self.sampler(subkey, self.Z, self.N_samples)
+        coords_batch = self.sampler(subkey, self.N_samples, self.N_up + self.N_down, self.Zs, self.nuclei_coords)
         loss = self._energy(self.w, coords_batch)
         losses = [loss]
         energy = self.test()
         self.energies = [energy]
         for step in tqdm(range(self.num_batches)):
             self.random_key, subkey = jax.random.split(self.random_key)
-            coords_batch = self.sampler(subkey, self.Z, self.N_samples)
+            coords_batch = self.sampler(subkey, self.N_samples, self.N_up + self.N_down, self.Zs, self.nuclei_coords)
             grads = grad_energy(self.w, coords_batch)
             updates, opt_state = optimizer.update(grads, opt_state, self.w)
             self.w = optax.apply_updates(self.w, updates)
@@ -185,8 +192,6 @@ class E3FerminetAtom:
                 energy = self.test()
                 self.energies.append(energy)
                 print("ENERGY:", energy)
-                # print("WEIGHTS:")
-                # print(self.w)
                 if self.use_wandb:
                     wandb.log({"loss": loss, "energy": energy})
                 weights.append(self.w)
@@ -205,9 +210,11 @@ class E3FerminetAtom:
             idx = -1
         self.w = self.w_list[idx]
 
-    def test(self, test_N_samples=50000):
+    def test(self, test_N_samples=None):
+        if test_N_samples is None:
+            test_N_samples = self.test_N_samples
         self.random_key, subkey = jax.random.split(self.random_key)
-        coords_batch = self.sampler(subkey, self.Z, test_N_samples)
+        coords_batch = self.sampler(subkey, test_N_samples, self.N_up + self.N_down, self.Zs, self.nuclei_coords)
         test_energy = self._energy(self.w, coords_batch)
         # print("GROUND STATE ENERGY: {:.4f}".format(self._energy(self.w, coords_batch)))
         return test_energy
@@ -254,7 +261,7 @@ if __name__ == "__main__":
     if args.wandb:
         wandb.init(project="e3ferminet", config=config)
 
-    atom_model = E3FerminetAtom(config)
+    atom_model = E3FerminetMol(config)
     if args.load_path is not None:
         atom_model.load_weights(args.load_path)
     else:

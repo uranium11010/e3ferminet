@@ -1,0 +1,32 @@
+{
+    "name": "dihydrogen_cation",
+    "random_seed": 0,
+    "Zs": [1, 1],
+    "N_up": 1,
+    "N_down": 0,
+    "nuclei_coords": [[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+    "batch_size": 128,
+    "num_batches": 50000,
+    "validate_every": 500,
+    "patience": null,
+    "lr": {
+        "init_value": 2e-5,
+	"peak_value": 2e-4,
+	"warmup_steps": 500,
+	"decay_steps": 25000,
+	"end_value": 2e-5,
+	"exponent": 1.0
+    },
+    "ansatz": {
+	"type": "ferminet_scalar_mol",
+	"lmax": 4,
+        "hidden_dim": 4,
+        "num_layers": 2
+    },
+    "MH": {
+        "stdev": 0.2,
+        "warmup": 500,
+        "interval": 10,
+        "batch_size": 128
+    }
+}

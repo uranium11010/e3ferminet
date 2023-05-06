@@ -53,6 +53,7 @@ class FerminetScalarAnsatzMol:
             self.layers.append(layer)
 
         self.linear_head = e3nn.flax.Linear(irreps_out=self.N * e3nn.Irrep(0, 1), biases=True)
+        self.tanh_head = config.get("tanh_head", False)
 
         def envelope(zeta, beta, x):
             # zeta: (N, M) jnp.ndarray
@@ -78,7 +79,9 @@ class FerminetScalarAnsatzMol:
                 else:
                     h = layer["residual"](a, h)
             z = self.linear_head.apply(w["linear_head"], h).array  # (..., N (j), N (i))
-            e = self.envelope(jnp.abs(w["envelope_exponent"]) + 0.5, w["envelope_coeffs"], x)  # (..., N (j), N (i))
+            if self.tanh_head:
+                z = jax.nn.tanh(z)
+            e = self.envelope(jnp.abs(w["envelope_exponent"]), jnp.abs(w["envelope_coeffs"]) + 0.5, x)  # (..., N (j), N (i))
             phi = z * e  # (..., N (j), N (i))
             D_up = jnp.linalg.det(phi[...,:self.N_up,:self.N_up])
             D_down = jnp.linalg.det(phi[...,self.N_up:,self.N_up:])
@@ -109,10 +112,12 @@ class FerminetScalarAnsatzMol:
             print("h:", h.shape, h.irreps)
         w["linear_head"] = self.linear_head.init(subkeys[self.num_layers], h)
         z = self.linear_head.apply(w["linear_head"], h).array
+        if self.tanh_head:
+            z = jax.nn.tanh(z)
         print("z:", z.shape)
         w["envelope_exponent"] = jnp.sqrt(jax.random.chisquare(subkeys[self.num_layers+1], shape=(self.N, self.M), df=2)) * 0.5
-        w["envelope_coeffs"] = jax.random.normal(subkeys[self.num_layers+2], shape=(self.N, self.M))
-        e = self.envelope(jnp.abs(w["envelope_exponent"]) + 0.5, w["envelope_coeffs"], x)  # (..., N (j), N (i))
+        w["envelope_coeffs"] = jnp.sqrt(jax.random.chisquare(subkeys[self.num_layers+2], shape=(self.N, self.M), df=2)) * 0.5
+        e = self.envelope(jnp.abs(w["envelope_exponent"]) + 0.5, jnp.abs(w["envelope_coeffs"]) + 0.5, x)  # (..., N (j), N (i))
         print("e:", e.shape)
         phi = z * e
         print("phi:", phi.shape)
@@ -120,6 +125,8 @@ class FerminetScalarAnsatzMol:
         print("D_up:", D_up.shape)
         D_down = jnp.linalg.det(phi[...,self.N_up:,self.N_up:])
         print("D_down:", D_down.shape)
+        psi = D_up * D_down
+        print("psi:", psi)
         return w
 
     def load_weights(self, ckpt_path):

@@ -19,6 +19,7 @@ import e3nn_jax as e3nn  # import e3nn-jax
 from e3ferminet_mol import Ansatz
 
 jnp.set_printoptions(precision=4, suppress=True)
+jax.config.update("jax_enable_x64", True)
 
 print(jax.__version__)
 print(flax.__version__)
@@ -184,6 +185,7 @@ class E3FerminetMol:
             self.random_key, subkey = jax.random.split(self.random_key)
             coords_batch = self.sampler(subkey, self.N_samples, self.N_up + self.N_down, self.Zs, self.nuclei_coords)
             grads = grad_energy(self.w, coords_batch)
+            # breakpoint()
             updates, opt_state = optimizer.update(grads, opt_state, self.w)
             self.w = optax.apply_updates(self.w, updates)
             loss = self._energy(self.w, coords_batch)
@@ -219,16 +221,6 @@ class E3FerminetMol:
         # print("GROUND STATE ENERGY: {:.4f}".format(self._energy(self.w, coords_batch)))
         return test_energy
     
-    def plot_one_electron_radial(self, max_r, plot_samples=5000):
-        radii = jnp.linspace(0, max_r, plot_samples+1)
-        coords_batch = np.hstack((np.expand_dims(radii, axis=1), np.zeros((plot_samples+1, 3*self.Z - 1))))
-        psi = self.ansatz.wavefunction(self.w, coords_batch)
-        x_label = "$r$"
-        y_label = "$\\psi(r\\hat e_z, 0, \\ldots, 0)$"
-        df = pd.DataFrame({x_label: radii, y_label: psi})
-        fig = px.line(df, x=x_label, y=y_label)
-        fig.show()
-
     def plot_density_3D(self, plot_samples=5000):
         self.random_key, subkey = jax.random.split(self.random_key)
         coords_batch = self.sampler(subkey, self.Z, plot_samples)
@@ -240,9 +232,6 @@ class E3FerminetMol:
         print(df.head())
         fig = px.scatter_3d(df, x='x', y='y', z='z')
         fig.show()
-    
-    def plot_density_2D(self, pixel_size=0.01, step_size=0.1):
-        pass
 
 
 if __name__ == "__main__":
@@ -259,17 +248,16 @@ if __name__ == "__main__":
     config["use_wandb"] = args.wandb
 
     if args.wandb:
-        wandb.init(project="e3ferminet", config=config)
+        wandb.init(project="e3ferminet_main_test", group=config["name"], config=config)
 
-    atom_model = E3FerminetMol(config)
+    mol_model = E3FerminetMol(config)
     if args.load_path is not None:
-        atom_model.load_weights(args.load_path)
+        mol_model.load_weights(args.load_path)
     else:
-        atom_model.train_loop()
-        atom_model.choose_weights("best")
-    atom_model.sampled_coords = None
-    test_energy = atom_model.test()
+        mol_model.train_loop()
+        mol_model.choose_weights("best")
+    mol_model.sampled_coords = None
+    test_energy = mol_model.test()
     print("ENERGY: {:.4f}".format(test_energy))
-    atom_model.plot_one_electron_radial(4)
     if args.save_path is not None:
-        atom_model.save_weights(args.save_path)
+        mol_model.save_weights(args.save_path)

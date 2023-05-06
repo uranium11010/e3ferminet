@@ -1,0 +1,28 @@
+{
+    "name": "helium_toy",
+    "random_seed": 2,
+    "Z": 2,
+    "N_up": 1,
+    "N_down": 1,
+    "batch_size": 128,
+    "num_batches": 10000,
+    "validate_every": 500,
+    "patience": null,
+    "lr": {
+        "init_value": 1e-4,
+	"peak_value": 1e-3,
+	"warmup_steps": 100,
+	"decay_steps": 900,
+	"end_value": 1e-4,
+	"exponent": 1.0
+    },
+    "ansatz": {
+	"type": "toy"
+    },
+    "MH": {
+        "stdev": 0.2,
+        "warmup": 500,
+        "interval": 10,
+        "batch_size": 128
+    }
+}

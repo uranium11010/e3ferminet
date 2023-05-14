@@ -18,7 +18,7 @@ class ToyAnsatz:
         def wavefunction(w, coords):  # coords can be unbatched or batched
             # TO-DO antisymmetrize the wavefunction at the end (spin-up and spin-down separately)
             x = e3nn.tensor_square(e3nn.IrrepsArray(f"{self.Z}x1o", coords)).filter(keep="0e")
-            return self.mlp.apply(w["mlp"], x.array).squeeze(-1) * self.envelope(jnp.abs(w["envelope"]), coords)
+            return self.mlp.apply(w["mlp"], x.array).squeeze(-1) * self.envelope(jnp.abs(w["envelope"]) + self.Z * 0.5, coords)
         self.wavefunction = wavefunction
 
     def init_weights(self, random_key):  # coords can be batched or unbatched
@@ -27,8 +27,12 @@ class ToyAnsatz:
         x = e3nn.tensor_square(e3nn.IrrepsArray(f"{self.Z}x1o", coords)).filter(keep="0e")
         return {
             "mlp": self.mlp.init(subkey1, x),
-            "envelope": jnp.sqrt(jax.random.chisquare(subkey2, df=2)) * self.Z
+            "envelope": jnp.sqrt(jax.random.chisquare(subkey2, df=2)) * self.Z * 0.5
         }
+
+    def load_weights(self, ckpt_path):
+        with open(ckpt_path, 'rb') as f:
+            return pkl.load(f)
 
 
 class ManualAnsatz:
@@ -80,6 +84,10 @@ class ManualAnsatz:
         x = self.linear_head.apply(w["linear_head"], x).array.squeeze(-1)
         w["envelope"] = jnp.sqrt(jax.random.chisquare(subkey4, df=2)) * self.Z
         return w
+
+    def load_weights(self, ckpt_path):
+        with open(ckpt_path, 'rb') as f:
+            return pkl.load(f)
 
 
 def max_l_from_Z(Z):

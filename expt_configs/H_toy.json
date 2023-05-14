@@ -1,19 +1,19 @@
 {
     "name": "hydrogen_toy",
-    "random_seed": 2,
+    "random_seed": 1,
     "Z": 1,
     "N_up": 1,
     "N_down": 0,
-    "batch_size": 64,
-    "num_batches": 2000,
-    "validate_every": 100,
+    "batch_size": 128,
+    "num_batches": 500000,
+    "validate_every": 500,
     "patience": null,
     "lr": {
-        "init_value": 1e-4,
-	"peak_value": 1e-3,
-	"warmup_steps": 100,
-	"decay_steps": 900,
-	"end_value": 1e-4,
+        "init_value": 2e-5,
+	"peak_value": 2e-4,
+	"warmup_steps": 500,
+	"decay_steps": 25000,
+	"end_value": 2e-5,
 	"exponent": 1.0
     },
     "ansatz": {
@@ -23,6 +23,6 @@
         "stdev": 0.2,
         "warmup": 500,
         "interval": 10,
-        "batch_size": 64
+        "batch_size": 128
     }
 }

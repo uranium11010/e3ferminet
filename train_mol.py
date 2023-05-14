@@ -248,7 +248,7 @@ if __name__ == "__main__":
     config["use_wandb"] = args.wandb
 
     if args.wandb:
-        wandb.init(project="e3ferminet_main_test", group=config["name"], config=config)
+        wandb.init(project="e3ferminet_main", group=config["name"], config=config)
 
     mol_model = E3FerminetMol(config)
     if args.load_path is not None:

@@ -1,10 +1,10 @@
 {
-    "name": "helium",
+    "name": "beryllium_hydride",
     "random_seed": 0,
-    "Zs": [2],
-    "N_up": 1,
-    "N_down": 1,
-    "nuclei_coords": [[0.0, 0.0, 0.0]],
+    "Zs": [1, 4, 1],
+    "N_up": 3,
+    "N_down": 3,
+    "nuclei_coords": [[-2.52, 0.0, 0.0], [0.0, 0.0, 0.0], [2.52, 0.0, 0.0]],
     "batch_size": 128,
     "num_batches": 500000,
     "validate_every": 500,
@@ -13,15 +13,15 @@
         "init_value": 1e-4,
 	"peak_value": 1e-3,
 	"warmup_steps": 500,
-	"decay_steps": 25000,
+	"decay_steps": 10000,
 	"end_value": 1e-4,
 	"exponent": 1.0
     },
     "ansatz": {
 	"type": "ferminet_scalar_mol",
-	"lmax": 1,
-        "hidden_dim": 2,
-        "num_layers": 1
+	"lmax": 4,
+        "hidden_dim": 8,
+        "num_layers": 3
     },
     "MH": {
         "stdev": 0.2,

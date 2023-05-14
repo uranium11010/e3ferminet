@@ -19,6 +19,7 @@ import e3nn_jax as e3nn  # import e3nn-jax
 from e3ferminet import Ansatz
 
 jnp.set_printoptions(precision=4, suppress=True)
+jax.config.update("jax_enable_x64", True)
 
 print(jax.__version__)
 print(flax.__version__)
@@ -225,7 +226,7 @@ class E3FerminetAtom:
     def plot_density_3D(self, plot_samples=5000):
         self.random_key, subkey = jax.random.split(self.random_key)
         coords_batch = self.sampler(subkey, self.Z, plot_samples)
-        densities = vmap(self.ansatz.wavefunction)(self.w, coords_batch) ** 2
+        densities = self.ansatz.wavefunction(self.w, coords_batch) ** 2
         max_density = jnp.max(densities)
         self.random_key, subkey = jax.random.split(self.random_key)
         coords_batch = coords_batch[max_density * jax.random.uniform(subkey, shape=(plot_samples,)) < densities]
@@ -252,7 +253,7 @@ if __name__ == "__main__":
     config["use_wandb"] = args.wandb
 
     if args.wandb:
-        wandb.init(project="e3ferminet", config=config)
+        wandb.init(project="e3ferminet_main", group=config["name"], config=config)
 
     atom_model = E3FerminetAtom(config)
     if args.load_path is not None:

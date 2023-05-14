@@ -4,15 +4,15 @@
     "Z": 2,
     "N_up": 1,
     "N_down": 1,
-    "batch_size": 128,
-    "num_batches": 10000,
+    "batch_size": 512,
+    "num_batches": 500000,
     "validate_every": 500,
     "patience": null,
     "lr": {
         "init_value": 1e-4,
 	"peak_value": 1e-3,
-	"warmup_steps": 100,
-	"decay_steps": 900,
+	"warmup_steps": 500,
+	"decay_steps": 25000,
 	"end_value": 1e-4,
 	"exponent": 1.0
     },
@@ -23,6 +23,6 @@
         "stdev": 0.2,
         "warmup": 500,
         "interval": 10,
-        "batch_size": 128
+        "batch_size": 256
     }
 }

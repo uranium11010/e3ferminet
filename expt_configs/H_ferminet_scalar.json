@@ -10,18 +10,18 @@
     "validate_every": 500,
     "patience": null,
     "lr": {
-        "init_value": 2e-5,
-	"peak_value": 2e-4,
+        "init_value": 1e-4,
+	"peak_value": 1e-3,
 	"warmup_steps": 500,
 	"decay_steps": 25000,
-	"end_value": 2e-5,
+	"end_value": 1e-4,
 	"exponent": 1.0
     },
     "ansatz": {
 	"type": "ferminet_scalar_mol",
-	"lmax": 4,
-        "hidden_dim": 4,
-        "num_layers": 2
+	"lmax": 1,
+        "hidden_dim": 2,
+        "num_layers": 1
     },
     "MH": {
         "stdev": 0.2,

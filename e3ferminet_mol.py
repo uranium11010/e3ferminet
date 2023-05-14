@@ -81,7 +81,7 @@ class FerminetScalarAnsatzMol:
             z = self.linear_head.apply(w["linear_head"], h).array  # (..., N (j), N (i))
             if self.tanh_head:
                 z = jax.nn.tanh(z)
-            e = self.envelope(jnp.abs(w["envelope_exponent"]), jnp.abs(w["envelope_coeffs"]) + 0.5, x)  # (..., N (j), N (i))
+            e = self.envelope(jnp.abs(w["envelope_exponent"]) + 0.5, jnp.abs(w["envelope_coeffs"]) + 0.5, x)  # (..., N (j), N (i))
             phi = z * e  # (..., N (j), N (i))
             D_up = jnp.linalg.det(phi[...,:self.N_up,:self.N_up])
             D_down = jnp.linalg.det(phi[...,self.N_up:,self.N_up:])
